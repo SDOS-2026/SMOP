@@ -72,17 +72,15 @@ describe('Response Utilities', () => {
       expect(result.limit).toBe(100);
     });
 
-    // NaN handling — current implementation does NOT guard against NaN
-    // parseInt('abc') = NaN, Math.max(1, NaN) = NaN
-    // Documenting actual behavior; this is a known limitation
-    it('should return NaN for non-numeric page string (no guard in impl)', () => {
+    it('should use the default for a non-numeric page', () => {
       const result = parsePagination({ page: 'abc' });
-      expect(result.page).toBeNaN();
+      expect(result.page).toBe(1);
+      expect(result.skip).toBe(0);
     });
 
-    it('should return NaN for non-numeric limit string (no guard in impl)', () => {
+    it('should use the default for a non-numeric limit', () => {
       const result = parsePagination({ limit: 'xyz' });
-      expect(result.limit).toBeNaN();
+      expect(result.limit).toBe(20);
     });
 
     // Skip calculation

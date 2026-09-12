@@ -5,6 +5,7 @@ import { writeAuditLog } from '../../utils/auditLogger';
 import { AppError, NotFoundError } from '../../utils/errors';
 import { CustomerEnquiryStatus, CustomerQuotationStatus, CustomerOrderStatus, Prisma, BOMStatus } from '@prisma/client';
 import { CustomerEnquiryInput, GenerateQuotationInput, ConfirmOrderInput, UpdateOrderStatusInput } from './sales.validator';
+import { withSerializableTransaction } from '../../utils/transaction';
 
 // Allowed order status transitions
 const ORDER_TRANSITIONS: Record<CustomerOrderStatus, CustomerOrderStatus[]> = {
@@ -195,8 +196,9 @@ export class SalesService {
   // =========================================================================
 
   async confirmOrder(input: ConfirmOrderInput, userId: string) {
+    const result = await withSerializableTransaction(async (tx) => {
     // Feasibility gate: find a BOM for this product and check inventory
-    const bom = await prisma.bOM.findFirst({
+    const bom = await tx.bOM.findFirst({
       where: {
         productName: { equals: input.productName, mode: 'insensitive' },
         status: BOMStatus.ACTIVE,
@@ -212,7 +214,7 @@ export class SalesService {
     if (bom) {
       // Check feasibility
       const materialIds = bom.items.map(item => item.materialId);
-      const inventoryRecords = await prisma.inventory.groupBy({
+      const inventoryRecords = await tx.inventory.groupBy({
         by: ['materialId'],
         where: { materialId: { in: materialIds } },
         _sum: { availableQty: true },
@@ -242,9 +244,9 @@ export class SalesService {
       }
     }
 
-    const orderNo = await generateSequenceNumber('ORD', 'customerOrder');
+    const orderNo = await generateSequenceNumber('ORD', 'customerOrder', tx);
 
-    const order = await prisma.customerOrder.create({
+    const order = await tx.customerOrder.create({
       data: {
         orderNo,
         quotationId: input.quotationId || null,
@@ -268,7 +270,7 @@ export class SalesService {
 
     // Update quotation status if linked
     if (input.quotationId) {
-      await prisma.customerQuotation.update({
+      await tx.customerQuotation.update({
         where: { id: input.quotationId },
         data: { status: CustomerQuotationStatus.ACCEPTED },
       });
@@ -280,7 +282,7 @@ export class SalesService {
         const requiredQty = bomItem.quantity * input.quantity;
 
         // Find inventory records for this material and consume
-        const inventories = await prisma.inventory.findMany({
+        const inventories = await tx.inventory.findMany({
           where: { materialId: bomItem.materialId, availableQty: { gt: 0 } },
           orderBy: { updatedAt: 'asc' },
         });
@@ -292,12 +294,12 @@ export class SalesService {
           const newQty = inv.quantity - consume;
           const newAvailable = inv.availableQty - consume;
 
-          await prisma.inventory.update({
+          await tx.inventory.update({
             where: { id: inv.id },
             data: { quantity: newQty, availableQty: newAvailable },
           });
 
-          await prisma.inventoryTransaction.create({
+          await tx.inventoryTransaction.create({
             data: {
               inventoryId: inv.id,
               type: 'ISSUE',
@@ -316,15 +318,18 @@ export class SalesService {
       }
     }
 
+    return { order, orderNo, feasibilityChecked: !!bom };
+    });
+
     await writeAuditLog({
       actorId: userId,
       action: 'CONFIRM_ORDER',
       entityType: 'CustomerOrder',
-      entityId: order.id,
-      metadata: { orderNo, customerName: input.customerName, totalAmount: input.totalAmount, feasibilityChecked: !!bom },
+      entityId: result.order.id,
+      metadata: { orderNo: result.orderNo, customerName: input.customerName, totalAmount: input.totalAmount, feasibilityChecked: result.feasibilityChecked },
     });
 
-    return order;
+    return result.order;
   }
 
   // =========================================================================

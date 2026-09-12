@@ -12,6 +12,14 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model SequenceCounter {
+  key       String   @id
+  value     Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("sequence_counters")
+}
+
 // ============================================================================
 // ENUMS
 // ============================================================================
