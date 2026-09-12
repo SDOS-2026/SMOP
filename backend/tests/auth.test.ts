@@ -8,6 +8,19 @@ describe('Health Check', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data.status).toBe('healthy');
+    expect(res.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+  });
+
+  it('preserves a valid caller request ID for cross-service tracing', async () => {
+    const res = await request(app).get('/api/health').set('x-request-id', 'edge-request-123');
+    expect(res.headers['x-request-id']).toBe('edge-request-123');
+  });
+
+  it('reports not ready when the database is unavailable', async () => {
+    const res = await request(app).get('/api/health/ready');
+    expect(res.status).toBe(503);
+    expect(res.body.data.status).toBe('not_ready');
   });
 });
 

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../utils/errors';
+import { logger } from '../utils/logger';
 
 /**
  * Global error handling middleware.
@@ -11,15 +12,25 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ): void {
-  // Log error in development
-  if (process.env.NODE_ENV === 'development') {
-    console.error('[ErrorHandler]', err);
+  const requestId = res.locals?.requestId as string | undefined;
+
+  const errorType = err.constructor?.name;
+  const isKnownFrameworkError = errorType === 'PrismaClientKnownRequestError' || errorType === 'ZodError';
+  if (err instanceof AppError || isKnownFrameworkError) {
+    logger.warn('operational_error', {
+      requestId,
+      statusCode: err instanceof AppError ? err.statusCode : undefined,
+      error: err.message,
+    });
+  } else {
+    logger.error('unhandled_request_error', err, { requestId });
   }
 
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
       success: false,
       error: err.message,
+      ...(requestId && { requestId }),
     });
     return;
   }
@@ -32,6 +43,7 @@ export function errorHandler(
       res.status(409).json({
         success: false,
         error: `Duplicate value for field: ${Array.isArray(target) ? target.join(', ') : target}`,
+        ...(requestId && { requestId }),
       });
       return;
     }
@@ -39,6 +51,7 @@ export function errorHandler(
       res.status(404).json({
         success: false,
         error: 'Record not found',
+        ...(requestId && { requestId }),
       });
       return;
     }
@@ -51,6 +64,7 @@ export function errorHandler(
       success: false,
       error: 'Validation failed',
       message: zodErr.errors?.map((e: any) => `${e.path.join('.')}: ${e.message}`).join('; '),
+      ...(requestId && { requestId }),
     });
     return;
   }
@@ -61,5 +75,6 @@ export function errorHandler(
     error: process.env.NODE_ENV === 'production'
       ? 'Internal server error'
       : err.message || 'Internal server error',
+    ...(requestId && { requestId }),
   });
 }

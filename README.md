@@ -118,6 +118,20 @@ The project is well-tested to ensure stability.
 - The **Backend** features a suite of unit and integration tests (e.g., testing `auth.service`, `purchaseOrders.integration`, etc.) using Vitest.
 - The **Frontend** uses Vitest for unit testing and Playwright for broader End-to-End browser testing to verify correct interactions and rendering.
 
+## Production Systems Engineering
+
+SMOP includes explicit reliability and operability controls rather than treating deployment as a build-only concern:
+
+- Atomic, database-backed document sequences prevent duplicate PO, receipt, batch, and order numbers under concurrent traffic.
+- Order feasibility, creation, quotation acceptance, and FIFO inventory consumption run as one serializable transaction with bounded conflict retries.
+- Separate liveness (`/api/health/live`) and database-aware readiness (`/api/health/ready`) probes support safe orchestration and traffic draining. `/api/health` remains a backwards-compatible liveness endpoint.
+- Every request receives an `x-request-id`; completion and error events are emitted as structured JSON with latency and status fields.
+- Production starts fail fast when the database URL or a sufficiently strong JWT secret is missing.
+- SIGTERM/SIGINT handling stops accepting traffic, drains connections, disconnects Prisma, and enforces a bounded shutdown deadline.
+- CI builds and tests both applications from locked dependencies. Backend builds automatically generate the Prisma client.
+
+See [Production Operations](docs/PRODUCTION_OPERATIONS.md) for deployment order, probe configuration, rollback guidance, suggested alerts, and the remaining hardening roadmap.
+
 ## Contributing
 1. Create a feature branch (`git checkout -b feature/your-feature-name`)
 2. Make your changes and write/update tests as necessary.

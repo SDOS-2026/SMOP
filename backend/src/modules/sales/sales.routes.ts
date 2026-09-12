@@ -7,7 +7,7 @@ import { customerEnquirySchema, generateQuotationSchema, confirmOrderSchema, upd
 import { UserRole } from '@prisma/client';
 
 const router = Router();
-router.use(authenticate);
+router.use(['/customer', '/quotation', '/order'], authenticate);
 
 // Customer enquiry
 router.post(

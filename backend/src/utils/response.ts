@@ -41,8 +41,10 @@ export function sendError(
  * Parse pagination params from query string
  */
 export function parsePagination(query: { page?: string; limit?: string }): PaginationParams {
-  const page = Math.max(1, parseInt(query.page || '1', 10));
-  const limit = Math.min(100, Math.max(1, parseInt(query.limit || '20', 10)));
+  const parsedPage = Number.parseInt(query.page || '1', 10);
+  const parsedLimit = Number.parseInt(query.limit || '20', 10);
+  const page = Number.isFinite(parsedPage) ? Math.max(1, parsedPage) : 1;
+  const limit = Number.isFinite(parsedLimit) ? Math.min(100, Math.max(1, parsedLimit)) : 20;
   const skip = (page - 1) * limit;
   return { page, limit, skip };
 }

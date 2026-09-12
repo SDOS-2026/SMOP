@@ -1,16 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────
-vi.mock('../../src/config/database', () => ({
-  default: {
+const mockDatabase = vi.hoisted(() => {
+  const database: any = {
     customerEnquiry: { create: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: vi.fn() },
     customerQuotation: { create: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: vi.fn() },
     customerOrder: { create: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     bOM: { findFirst: vi.fn() },
     inventory: { groupBy: vi.fn(), findMany: vi.fn(), update: vi.fn() },
     inventoryTransaction: { create: vi.fn() },
-  },
-}));
+  };
+  database.$transaction = vi.fn((operation: any) => operation(database));
+  return database;
+});
+
+vi.mock('../../src/config/database', () => ({ default: mockDatabase }));
 vi.mock('../../src/utils/auditLogger', () => ({ writeAuditLog: vi.fn() }));
 vi.mock('../../src/utils/sequence', () => ({ generateSequenceNumber: vi.fn().mockResolvedValue('SEQ-001') }));
 
@@ -154,6 +158,10 @@ describe('SalesService', () => {
 
       await expect(service.confirmOrder(input, userId)).resolves.toBeDefined();
       expect(prisma.inventory.groupBy).not.toHaveBeenCalled();
+      expect(prisma.$transaction).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({ isolationLevel: 'Serializable' }),
+      );
     });
 
     it('should confirm order when BOM exists and all materials are sufficient', async () => {

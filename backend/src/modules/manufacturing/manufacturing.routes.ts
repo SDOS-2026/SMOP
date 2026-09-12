@@ -12,7 +12,7 @@ import {
 import { UserRole } from '@prisma/client';
 
 const router = Router();
-router.use(authenticate);
+router.use(['/process', '/bom', '/feasibility', '/worker'], authenticate);
 
 // Process management
 router.post(
